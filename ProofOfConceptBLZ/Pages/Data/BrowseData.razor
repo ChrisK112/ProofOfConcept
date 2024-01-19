@@ -1,0 +1,76 @@
+﻿@page "/Data/BrowseData"
+
+@using DataAccessLibrary
+@using DataAccessLibrary.Models
+@using ProofOfConceptBLZ.Models
+
+@inject IPeopleData _db
+
+<h3>Browse Data</h3>
+
+<h4>Insert New Person</h4>
+<EditForm Model="@newPerson" OnValidSubmit="InsertPerson">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <InputText id="id" @bind-Value="newPerson.Id" />
+    <InputText id="name" @bind-Value="newPerson.Name" />
+    <InputText id="email" @bind-Value="newPerson.EmailAddress" />
+
+    <button type="submit" class="btn btn-primary">Submit</button>
+</EditForm>
+
+<h4>test data</h4>
+@if (people == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Name</th>
+                <th>EmailAddress</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var person in people)
+            {
+                <tr>
+                    <td>@person.Id</td>
+                    <td>@person.Name</td>
+                    <td>@person.EmailAddress</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<PersonModel> people;
+    private DisplayPersonModel newPerson = new DisplayPersonModel();
+
+    protected override async Task OnInitializedAsync()
+    {
+        people = await _db.GetPeople();
+    }
+
+    private async Task InsertPerson()
+    {
+        PersonModel p = new PersonModel
+            {
+                Id = newPerson.Id,
+                Name = newPerson.Name,
+                EmailAddress = newPerson.EmailAddress
+            };
+
+            await _db.InsertPerson(p);
+            //or people = await _db.GetPeople();
+
+            people.Add(p);
+
+            newPerson = new DisplayPersonModel();
+    }
+}
