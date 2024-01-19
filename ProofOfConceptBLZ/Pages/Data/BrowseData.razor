@@ -1,52 +1,61 @@
 ﻿@page "/Data/BrowseData"
-
 @using DataAccessLibrary
 @using DataAccessLibrary.Models
 @using ProofOfConceptBLZ.Models
 
 @inject IPeopleData _db
+@inject AuthenticationStateProvider _authenticationStateProvider
+@inject NavigationManager _navigationManager
 
-<h3>Browse Data</h3>
 
-<h4>Insert New Person</h4>
-<EditForm Model="@newPerson" OnValidSubmit="InsertPerson">
-    <DataAnnotationsValidator />
-    <ValidationSummary />
+<AuthorizeView>
+    <Authorized>
+        <h3>Browse Data</h3>
 
-    <InputText id="id" @bind-Value="newPerson.Id" />
-    <InputText id="name" @bind-Value="newPerson.Name" />
-    <InputText id="email" @bind-Value="newPerson.EmailAddress" />
+        <h4>Insert New Person</h4>
+        <EditForm Model="@newPerson" OnValidSubmit="InsertPerson" Context="formContext">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
 
-    <button type="submit" class="btn btn-primary">Submit</button>
-</EditForm>
+            <InputText id="id" @bind-Value="newPerson.Id" />
+            <InputText id="name" @bind-Value="newPerson.Name" />
+            <InputText id="email" @bind-Value="newPerson.EmailAddress" />
 
-<h4>test data</h4>
-@if (people == null)
-{
-    <p><em>Loading...</em></p>
-}
-else
-{
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Id</th>
-                <th>Name</th>
-                <th>EmailAddress</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var person in people)
-            {
-                <tr>
-                    <td>@person.Id</td>
-                    <td>@person.Name</td>
-                    <td>@person.EmailAddress</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
+            <button type="submit" class="btn btn-primary">Submit</button>
+        </EditForm>
+
+        <h4>test data</h4>
+        @if (people == null)
+        {
+            <p><em>Loading...</em></p>
+        }
+        else
+        {
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Id</th>
+                        <th>Name</th>
+                        <th>EmailAddress</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var person in people)
+                    {
+                        <tr>
+                            <td>@person.Id</td>
+                            <td>@person.Name</td>
+                            <td>@person.EmailAddress</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </Authorized>
+</AuthorizeView>
+
+
+
 
 @code {
     private List<PersonModel> people;
@@ -54,6 +63,13 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (!user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+
         people = await _db.GetPeople();
     }
 
@@ -73,4 +89,7 @@ else
 
             newPerson = new DisplayPersonModel();
     }
+
+    [CascadingParameter] protected Task<AuthenticationState> AuthStat { get; set; }
+
 }

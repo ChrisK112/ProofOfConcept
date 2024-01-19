@@ -1,0 +1,16 @@
+﻿@page "/RedirectToLogin"
+@inject NavigationManager _navigationManager
+
+@code {
+
+    [Parameter]
+    public string ReturnUrl { get; set; }
+
+    protected override void OnInitialized()
+    {
+
+        _navigationManager.NavigateTo($"Identity/Account/Login", true);
+
+    }
+
+    }
