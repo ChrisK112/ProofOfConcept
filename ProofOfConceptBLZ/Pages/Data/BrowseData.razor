@@ -69,8 +69,11 @@
         {
             _navigationManager.NavigateTo($"RedirectToLogin", false);
         }
-
-        people = await _db.GetPeople();
+        else
+        {
+            people = await _db.GetPeople();
+        }
+        
     }
 
     private async Task InsertPerson()

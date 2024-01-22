@@ -1,80 +1,148 @@
 ﻿@page "/Data/ImportData"
+@inject IConfiguration _config
+@inject AuthenticationStateProvider _authenticationStateProvider
+@inject UserManager<ProofOfConceptBLZ.Data.ApplicationUser> _userManager
 
 @using DataAccessLibrary
 @using DataAccessLibrary.Models
+@using ProofOfConceptBLZ.Data
 @using ProofOfConceptBLZ.Models
+@using Microsoft.AspNetCore.Identity;
 
-@inject IPeopleData _db
 
-<h3>Browse Data</h3>
+<PageTitle>Import Data</PageTitle>
 
-<h4>Insert New Person</h4>
-<EditForm Model="@newPerson" OnValidSubmit="InsertPerson">
-    <DataAnnotationsValidator />
-    <ValidationSummary />
+<h3>Import Data</h3>
 
-    <InputText id="id" @bind-Value="newPerson.Id" />
-    <InputText id="name" @bind-Value="newPerson.Name" />
-    <InputText id="email" @bind-Value="newPerson.EmailAddress" />
-
-    <button type="submit" class="btn btn-primary">Submit</button>
+<EditForm Model="DataModel" OnValidSubmit="@SubmitForm">
+    <div>
+        <label for="campaignDataName">Data Name:</label>
+        <InputText id="campaignDataName" class="form-control" @bind-Value="DataModel.CampaignDataName" />
+    </div>
+    <div>
+        <label for="fileupload">Data File:</label>
+        <InputFile OnChange="@LoadFile" class="form-control" accept=".txt,.csv,.xlsx" />
+    </div>
+    <button class="btn btn-primary mt-3" type="submit">Upload</button>
 </EditForm>
 
-<EditForm>
-    
-</EditForm>
 
-<h4>test data</h4>
-@if (people == null)
+@if (isUploading)
 {
-    <p><em>Loading...</em></p>
+    <br />
+    <div class="spinner"></div>
+    <p> Uploading...</p>
 }
-else
+
+@* @if (file != null)
 {
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Id</th>
-                <th>Name</th>
-                <th>EmailAddress</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var person in people)
-            {
-                <tr>
-                    <td>@person.Id</td>
-                    <td>@person.Name</td>
-                    <td>@person.EmailAddress</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <ul>
+        <li>Name: @file.Name</li>
+        <li>Last modified: @file.LastModified.ToString()</li>
+        <li>Size (bytes): @file.Size</li>
+        <li>Content type: @file.ContentType</li>
+    </ul>
+} *@
+
+@if (errors.Count > 0)
+{
+    <br />
+    <h2>Erors</h2>
+    <ul class="text-danger">
+        @foreach (string error in errors)
+        {
+            <li>@error</li>
+        }
+
+    </ul>
 }
 
 @code {
-    private List<PersonModel> people;
-    private DisplayPersonModel newPerson = new DisplayPersonModel();
 
-    protected override async Task OnInitializedAsync()
+    private List<string> errors = new();
+    private int maxFilesSize = 1024 * 1024 * 50; //50MB
+    private int maxFiles = 1;
+    private CampaignDataImportModel DataModel = new();
+    private IBrowserFile? file;
+
+    Boolean isUploading;
+
+    private async Task SubmitForm()
     {
-        people = await _db.GetPeople();
+        try
+        {
+            isUploading = true;
+            string relPath = await UploadFile();
+            DataModel.FileName = relPath;
+        }
+        catch (Exception ex)
+        {
+            isUploading = false;
+            errors.Add("Error: " + ex.Message);
+        }
     }
 
-    private async Task InsertPerson()
+
+    private void LoadFile(InputFileChangeEventArgs e)
     {
-        PersonModel p = new PersonModel
+        file = e.File;
+    }
+
+    private async Task<string> UploadFile()
+    {
+        if (file == null) return "";
+
+        errors.Clear();
+
+        try
+        {
+            string company = await getUserCompany();
+            string trustedFileName = Path.ChangeExtension(Path.GetRandomFileName(), Path.GetExtension(file.Name));
+            string configPath = _config.GetValue<string>("FileStorage");
+            string authPath = company;
+            string path = Path.Combine(configPath, authPath, trustedFileName);
+
+            Directory.CreateDirectory(Path.Combine(configPath, authPath));
+            string relPath = Path.Combine(authPath, trustedFileName);
+
+            await using FileStream fs = new FileStream(path, FileMode.Create);
+            await file.OpenReadStream(maxFilesSize).CopyToAsync(fs);
+
+            isUploading = false;
+
+            return relPath;
+
+        }
+        catch (Exception ex)
+        {
+            errors.Add("File: " + file.Name + " Error: " + ex.Message);
+            isUploading = false;
+            throw;
+        }
+
+    }
+
+    private async Task<string> getUserCompany()
+    {
+        try
+        {
+            var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity.IsAuthenticated)
             {
-                Id = newPerson.Id,
-                Name = newPerson.Name,
-                EmailAddress = newPerson.EmailAddress
-            };
+                var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+                return userM.CompanyID;
+            }
+        }
+        catch (Exception)
+        {
 
-        await _db.InsertPerson(p);
-        //or people = await _db.GetPeople();
+            throw;
+        }
 
-        people.Add(p);
+        return "";
 
-        newPerson = new DisplayPersonModel();
     }
+
 }

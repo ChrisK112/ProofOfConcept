@@ -1,6 +1,6 @@
 ﻿@inherits LayoutComponentBase
 
-<PageTitle>ProofOfConceptBLZ</PageTitle>
+<PageTitle>ProofOfConcept</PageTitle>
 
 <div class="page">
     <div class="sidebar">
@@ -9,7 +9,14 @@
 
     <main>
         <div class="top-row px-4">
-            <a href="https://docs.microsoft.com/aspnet/" target="_blank">About</a>
+            <AuthorizeView>
+                <Authorized>
+                    <a href="/Identity/Account/Logout">Logout</a>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="/Identity/Account/Login">Login</a>
+                </NotAuthorized>
+            </AuthorizeView>
         </div>
 
         <article class="content px-4">

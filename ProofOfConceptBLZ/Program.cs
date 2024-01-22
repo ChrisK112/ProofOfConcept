@@ -22,6 +22,7 @@ builder.Services.AddIdentity<ProofOfConceptBLZ.Data.ApplicationUser, IdentityRol
     options.Password.RequireLowercase = false;
     options.SignIn.RequireConfirmedEmail = false;
 })
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ProofOfConceptBLZ.Data.DataContext>();
 
 var app = builder.Build();
