@@ -8,6 +8,8 @@
 @using ProofOfConceptBLZ.Data
 @using ProofOfConceptBLZ.Models
 @using Microsoft.AspNetCore.Identity;
+@using System.Text.RegularExpressions
+@using System.Text
 
 
 <PageTitle>Import Data</PageTitle>
@@ -25,6 +27,47 @@
     </div>
     <button class="btn btn-primary mt-3" type="submit">Upload</button>
 </EditForm>
+<br />
+<br />
+
+@if (isFileLoaded)
+{
+    <EditForm Model="SelectModel" OnValidSubmit="@SubmitEmailChoice">
+        <div>
+            <label for="emailDataColumn">Select the column containing emails:</label>
+            <InputSelect id="emailDataColumn" class="form-select" @bind-Value=emailColumnName>
+                <option value="">Select...</option>
+                @foreach (string columnName in dataColumnNames)
+                {
+                    <option value="@columnName">@columnName</option>
+                }
+            </InputSelect>
+        </div>
+        <button class="btn btn-primary mt-3" type="submit">Select</button>
+    </EditForm>
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                @foreach (string columnName in dataColumnNames)
+                {
+                    <th scope="col">@columnName</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (PreviewDataRow rowO in previewTable)
+            {
+                <tr @key=rowO>
+                    @foreach (string cell in rowO.row)
+                    {
+                        <td>@cell</td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+}
 
 
 @if (isUploading)
@@ -34,15 +77,6 @@
     <p> Uploading...</p>
 }
 
-@* @if (file != null)
-{
-    <ul>
-        <li>Name: @file.Name</li>
-        <li>Last modified: @file.LastModified.ToString()</li>
-        <li>Size (bytes): @file.Size</li>
-        <li>Content type: @file.ContentType</li>
-    </ul>
-} *@
 
 @if (errors.Count > 0)
 {
@@ -61,11 +95,32 @@
 
     private List<string> errors = new();
     private int maxFilesSize = 1024 * 1024 * 50; //50MB
-    private int maxFiles = 1;
     private CampaignDataImportModel DataModel = new();
+    private SelectDisplayModel SelectModel = new();
     private IBrowserFile? file;
+    private List<string> dataColumnNames;
+    private List<PreviewDataRow> previewTable;
+    private string emailColumnName;
+    private int previewTableMaxLineCount = 10; //not including header
+    private Regex csvSplit = new Regex("(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)", RegexOptions.Compiled);
 
     Boolean isUploading;
+    Boolean isFileLoaded;
+
+    private class PreviewDataRow
+    {
+        public List<string> row;
+        public PreviewDataRow(List<string> _row)
+        {
+            row = _row;
+        }
+    }
+
+
+    private async Task SubmitEmailChoice()
+    {
+        return;
+    }
 
     private async Task SubmitForm()
     {
@@ -74,6 +129,10 @@
             isUploading = true;
             string relPath = await UploadFile();
             DataModel.FileName = relPath;
+
+            //load column headers for email choice
+            await LoadPreview(Path.Combine(_config.GetValue<string>("FileStorage"), relPath));
+
         }
         catch (Exception ex)
         {
@@ -122,6 +181,84 @@
 
     }
 
+    private async Task LoadPreview(string filepath)
+    {
+
+        try
+        {
+            //determine file type
+
+            //for now, only allows > .txt, .csv
+            string extension = Path.GetExtension(filepath);
+
+            if (extension.Equals(".txt") || extension.Equals(".csv"))
+            {
+
+                //await using FileStream fs = new FileStream(filepath, FileMode.Open);
+                using StreamReader reader = File.OpenText(filepath);
+
+                string line = "";
+                int count = 0;
+                previewTable = new();
+                while((line =  reader.ReadLine()) != null)
+                {
+                    if (count == 0) //header row
+                    {
+                        dataColumnNames = GetLineSplit(line, extension);
+                        count++;
+                        continue; //skip to next row
+                    }
+                    else if (count == previewTableMaxLineCount)
+                    {
+                        break; //stop at max preview rows
+                    }
+
+                    count++;
+
+                    List<string> rowList = new();
+                    rowList = GetLineSplit(line, extension);
+                    previewTable.Add(new PreviewDataRow(rowList));
+
+                }
+
+
+            }
+            else
+            {
+                throw(new Exception("Unsupported filetype! : " + extension));
+
+            }
+
+        }
+        catch (Exception ex)
+        {
+            errors.Add("File: " + file.Name + " Error: " + ex.Message);
+            isUploading = false;
+            throw;
+        }
+
+        isFileLoaded = true;
+
+
+    }
+
+    private List<string> GetLineSplit(string line, string extension)
+    {
+        List<string> ret = new();
+        if (extension.Equals(".txt"))
+        {
+            ret = line.Split('\t').ToList();
+        }
+
+        if (extension.Equals(".csv"))
+        {
+            ret = QuotedSplit2(line, ",").ToList();
+
+        }
+        return ret;
+    }
+
+
     private async Task<string> getUserCompany()
     {
         try
@@ -143,6 +280,63 @@
 
         return "";
 
+    }
+
+    public static IEnumerable<string> QuotedSplit2(string s, string delim)
+    {
+        const char quote = '\"';
+
+        var sb = new StringBuilder(s.Length);
+        var counter = 0;
+        while (counter < s.Length)
+        {
+            // if starts with delmiter if so read ahead to see if matches
+            if (delim[0] == s[counter] &&
+                delim.SequenceEqual(ReadNext(s, counter, delim.Length)))
+            {
+                yield return sb.ToString();
+                sb.Clear();
+                counter = counter + delim.Length; // Move the counter past the delimiter
+            }
+            // if we hit a quote read until we hit another quote or end of string
+            else if (s[counter] == quote)
+            {
+                sb.Append(s[counter++]);
+                while (counter < s.Length && s[counter] != quote)
+                {
+                    sb.Append(s[counter++]);
+                }
+                // if not end of string then we hit a quote add the quote
+                if (counter < s.Length)
+                {
+                    sb.Append(s[counter++]);
+                }
+            }
+            else
+            {
+                sb.Append(s[counter++]);
+            }
+        }
+
+        if (sb.Length > 0)
+        {
+            yield return sb.ToString();
+        }
+    }
+
+    private static IEnumerable<char> ReadNext(string str, int currentPosition, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            if (currentPosition + i >= str.Length)
+            {
+                yield break;
+            }
+            else
+            {
+                yield return str[currentPosition + i];
+            }
+        }
     }
 
 }

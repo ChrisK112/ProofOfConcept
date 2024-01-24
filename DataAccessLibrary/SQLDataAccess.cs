@@ -7,6 +7,7 @@ using Microsoft.Data.SqlClient;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 
 namespace DataAccessLibrary
 {
@@ -44,6 +45,16 @@ namespace DataAccessLibrary
             {
                 await connection.ExecuteAsync(sql, parameters);
             }
+        }
+
+        public async Task SaveData(string storedProc, string connectionName, object parameters)
+        {
+            string connectionString = _config.GetConnectionString(ConnectionStringName)
+                ?? throw new Exception("Missing connection string at " + connectionName);
+
+            using var connection = new SqlConnection(connectionString);
+
+            await connection.ExecuteAsync(storedProc, parameters, commandType: System.Data.CommandType.StoredProcedure);
         }
 
     }
