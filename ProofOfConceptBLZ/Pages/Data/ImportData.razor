@@ -2,6 +2,8 @@
 @inject IConfiguration _config
 @inject AuthenticationStateProvider _authenticationStateProvider
 @inject UserManager<ProofOfConceptBLZ.Data.ApplicationUser> _userManager
+@inject ISQLDataAccess _db
+@inject NavigationManager _navigationManager
 
 @using DataAccessLibrary
 @using DataAccessLibrary.Models
@@ -15,39 +17,56 @@
 <PageTitle>Import Data</PageTitle>
 
 <h3>Import Data</h3>
-
-<EditForm Model="DataModel" OnValidSubmit="@SubmitForm">
-    <div>
-        <label for="campaignDataName">Data Name:</label>
-        <InputText id="campaignDataName" class="form-control" @bind-Value="DataModel.CampaignDataName" />
-    </div>
-    <div>
-        <label for="fileupload">Data File:</label>
-        <InputFile OnChange="@LoadFile" class="form-control" accept=".txt,.csv,.xlsx" />
-    </div>
-    <button class="btn btn-primary mt-3" type="submit">Upload</button>
-</EditForm>
 <br />
-<br />
-
-@if (isFileLoaded)
+@if (!importCompleted)
 {
-    <EditForm Model="SelectModel" OnValidSubmit="@SubmitEmailChoice">
+    <EditForm Model="FileUploadModel" OnValidSubmit="@SubmitFileForm">
+        <div>
+            <label for="fileupload">Data File:</label>
+            <InputFile OnChange="@LoadFile" class="form-control" accept=".txt,.csv,.xlsx" />
+        </div>
+        <button class="btn btn-primary mt-3" type="submit" disabled="@isLoading">Upload</button>
+    </EditForm>
+    <br />
+    <br />
+}
+else
+{
+    <h4>Import completed successfuly.</h4>
+    <br />
+    <p>Datafile: @dataTableName</p>
+    <p>Email Column: @emailColumnName</p>
+    <br />
+    <button class="btn btn-primary mt-3" type="button" onclick="@RefreshPage">New Import</button>
+}
+
+@if (isFileLoaded && !importCompleted)
+{
+    <EditForm Model="DataUploadModel" OnValidSubmit="@SubmitDatabaseImport">
+        <DataAnnotationsValidator />
+        <div>
+            <label for="campaignDataName">Data Name:</label>
+            <InputText id="campaignDataName" class="form-control" @bind-Value="DataUploadModel.DataFileName" />
+        </div>
         <div>
             <label for="emailDataColumn">Select the column containing emails:</label>
-            <InputSelect id="emailDataColumn" class="form-select" @bind-Value=emailColumnName>
-                <option value="">Select...</option>
+            <InputSelect id="emailDataColumn" class="form-select" @bind-Value=DataUploadModel.EmailColumnName disabled="@isLoading">
+                <option>Select...</option>
                 @foreach (string columnName in dataColumnNames)
                 {
                     <option value="@columnName">@columnName</option>
                 }
             </InputSelect>
         </div>
-        <button class="btn btn-primary mt-3" type="submit">Select</button>
+        <button class="btn btn-primary mt-3" type="submit" disabled="@isLoading">Confirm Selection</button>
     </EditForm>
+    <br />
+    <br />
+
 
     <table class="table table-striped">
-        <thead>
+        <caption class="caption-top">Preview Data</caption>
+        <thead title="Sample data">
             <tr>
                 @foreach (string columnName in dataColumnNames)
                 {
@@ -70,7 +89,7 @@
 }
 
 
-@if (isUploading)
+@if (isLoading)
 {
     <br />
     <div class="spinner"></div>
@@ -81,7 +100,7 @@
 @if (errors.Count > 0)
 {
     <br />
-    <h2>Erors</h2>
+    <h2>Errors</h2>
     <ul class="text-danger">
         @foreach (string error in errors)
         {
@@ -95,17 +114,20 @@
 
     private List<string> errors = new();
     private int maxFilesSize = 1024 * 1024 * 50; //50MB
-    private CampaignDataImportModel DataModel = new();
-    private SelectDisplayModel SelectModel = new();
+    private DataUploadModel DataUploadModel = new();
+    private FileUploadModel FileUploadModel = new();
     private IBrowserFile? file;
+    private string loadedFile;
     private List<string> dataColumnNames;
     private List<PreviewDataRow> previewTable;
     private string emailColumnName;
+    private string dataTableName;
     private int previewTableMaxLineCount = 10; //not including header
     private Regex csvSplit = new Regex("(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)", RegexOptions.Compiled);
 
-    Boolean isUploading;
+    Boolean isLoading;
     Boolean isFileLoaded;
+    Boolean importCompleted;
 
     private class PreviewDataRow
     {
@@ -116,19 +138,126 @@
         }
     }
 
-
-    private async Task SubmitEmailChoice()
+    void RefreshPage()
     {
-        return;
+        _navigationManager.NavigateTo(_navigationManager.Uri, true);
     }
 
-    private async Task SubmitForm()
+    private async Task SubmitDatabaseImport()
+    {
+        if (isLoading) return;
+        isLoading = true;
+        await Task.Delay(1000);
+
+        //get info on file location, data file name, email column choice as local vars
+        emailColumnName = DataUploadModel.EmailColumnName;
+        string emailColumn = emailColumnName;
+        string filePath = loadedFile;
+        
+        dataTableName = DataUploadModel.DataFileName;
+        string databaseDataFileName = dataTableName;
+        int companyId = Int32.Parse(await (getUserCompany()));
+        string username = await getUserName();
+        DateTime time = DateTime.UtcNow;
+
+        //create entry in DataTable table - result of  should be datatableid
+        int DataTableId;
+        try
+        {
+            DataTableId = await ImportNewDataTable(companyId, username, time, databaseDataFileName);
+        }
+        catch (Exception ex)
+        {
+            errors.Add("File: " + file.Name + " Error while importing data table: " + ex.Message);
+            return;
+        }
+
+        try
+        {
+            ImportNewData(companyId, filePath, emailColumn, DataTableId);
+        }
+        catch (Exception ex)
+        {
+            errors.Add("File: " + file.Name + " Error while importing data: " + ex.Message);
+            return;
+        }
+
+
+        //show completed
+        isLoading = false;
+        isFileLoaded = false;
+        importCompleted = true;
+
+    }
+
+    //DataTable
+    private async Task<int> ImportNewDataTable(int CompanyId, string UploadUser, DateTime UploadDateTime, string DataTableName)
+    {
+        return await _db.SaveDataReturn<int>("dbo.spDataTable_Insert", CreateDataTableModel(CompanyId, UploadUser, UploadDateTime, DataTableName));
+    }
+
+    //DataColumn, DataRow, DataCell
+    private async void ImportNewData(int companyId, string filePath, string emailColumn, int DataTableId)
+    {
+        string extension = Path.GetExtension(filePath);
+
+        //start loop - for each column, for each row, for each cell
+        using StreamReader reader = File.OpenText(filePath);
+
+        string line = "";
+        List<int> columnIdsList = new();
+        int count = 0;
+        previewTable = new();
+        while ((line = reader.ReadLine()) != null)
+        {
+            if (count == 0) //header row - create column entries on database
+            {
+                dataColumnNames = GetLineSplit(line, extension);
+                int columnIndex = 0;
+                foreach (string dataColumnName in dataColumnNames)
+                {
+                    //create column, get id
+                    Boolean isEmail = emailColumn.Equals(dataColumnName);
+                    int DataColumnId = await _db.SaveDataReturn<int>("dbo.spDataColumn_Insert", CreateDataColumnModel(columnIndex, DataTableId, companyId, dataColumnName, isEmail));
+                    columnIdsList.Add(DataColumnId);
+                    columnIndex++;
+
+                }
+
+                count++;
+                continue; //skip to next row
+            }
+            else
+            {
+                //create row and get id
+                int rowIndex = count - 1;
+                int DataRowId = await _db.SaveDataReturn<int>("dbo.spDataRow_Insert", CreateDataRowModel(rowIndex, DataTableId, companyId));
+
+                List<string> rowList = new();
+                rowList = GetLineSplit(line, extension);
+                int currentColumnIndex = 0;
+                foreach (string cell in rowList)
+                {
+                    //create cell
+                    await _db.SaveData("dbo.spDataCell_Insert", CreateDataCellModel(DataTableId, DataRowId, columnIdsList.ElementAt(currentColumnIndex), companyId, cell));
+                    currentColumnIndex++;
+                }
+
+                count++;
+            }
+
+        }
+    }
+
+
+    private async Task SubmitFileForm()
     {
         try
         {
-            isUploading = true;
+            isLoading = true;
+            isFileLoaded = false;
+            loadedFile = "";
             string relPath = await UploadFile();
-            DataModel.FileName = relPath;
 
             //load column headers for email choice
             await LoadPreview(Path.Combine(_config.GetValue<string>("FileStorage"), relPath));
@@ -136,7 +265,7 @@
         }
         catch (Exception ex)
         {
-            isUploading = false;
+            isLoading = false;
             errors.Add("Error: " + ex.Message);
         }
     }
@@ -163,11 +292,12 @@
 
             Directory.CreateDirectory(Path.Combine(configPath, authPath));
             string relPath = Path.Combine(authPath, trustedFileName);
+            loadedFile = Path.Combine(configPath, relPath);
 
             await using FileStream fs = new FileStream(path, FileMode.Create);
             await file.OpenReadStream(maxFilesSize).CopyToAsync(fs);
 
-            isUploading = false;
+            isLoading = false;
 
             return relPath;
 
@@ -175,7 +305,7 @@
         catch (Exception ex)
         {
             errors.Add("File: " + file.Name + " Error: " + ex.Message);
-            isUploading = false;
+            isLoading = false;
             throw;
         }
 
@@ -233,7 +363,7 @@
         catch (Exception ex)
         {
             errors.Add("File: " + file.Name + " Error: " + ex.Message);
-            isUploading = false;
+            isLoading = false;
             throw;
         }
 
@@ -270,6 +400,29 @@
             {
                 var userM = await _userManager.FindByNameAsync(user.Identity.Name);
                 return userM.CompanyID;
+            }
+        }
+        catch (Exception)
+        {
+
+            throw;
+        }
+
+        return "";
+
+    }
+
+    private async Task<string> getUserName()
+    {
+        try
+        {
+            var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity.IsAuthenticated)
+            {
+                var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+                return userM.UserName;
             }
         }
         catch (Exception)
@@ -339,4 +492,63 @@
         }
     }
 
+    private DataTableModel CreateDataTableModel(int CompanyId, string UploadUser, DateTime UploadDateTime, string DataTableName)
+    {
+        DataTableModel m = new();
+
+        m.CompanyId = CompanyId;
+        m.UploadUser = UploadUser;
+        m.UploadDateTime = UploadDateTime;
+        m.DataTableName = DataTableName;
+        m.NumberOfRecords = 0; //not sure if needed, can be implemented later.
+        m.IsDeleted = false;
+
+        return m;
+    }
+
+    private DataColumnModel CreateDataColumnModel(int index, int DataTableId, int CompanyId, string dataColumnName, Boolean isEmail)
+    {
+        DataColumnModel m = new();
+
+        m.DataColumnIndex = index;
+        m.DataTableId = DataTableId;
+        m.CompanyId = CompanyId;
+        m.ColumnHeader = dataColumnName;
+        m.IsEmailColumn = isEmail;
+
+        return m;
+    }
+
+    private DataRowModel CreateDataRowModel(int index, int DataTableId, int CompanyId)
+    {
+        DataRowModel m = new();
+
+        m.DataRowIndex = index;
+        m.DataTableId = DataTableId;
+        m.CompanyId = CompanyId;
+
+        return m;
+    }
+
+    private DataCellModel CreateDataCellModel(int DataTableId, int DataRowId, int DataColumnId, int CompanyId, string CellValue)
+    {
+        DataCellModel m = new();
+
+        m.DataTableId = DataTableId;
+        m.DataRowId = DataRowId;
+        m.DataColumnId = DataColumnId;
+        m.CompanyId = CompanyId;
+        m.CellValue = CellValue;
+
+        return m;
+    }
+
+
+    // public int Id { get; set; }
+    // public int DataTableId { get; set; }
+    // public int DataRowId { get; set; }
+    // public int DataColumnId { get; set; }
+    // public int CompanyId { get; set; }
+    // public string CellValue { get; set; }
+    // public Boolean IsEmail { get; set; }
 }

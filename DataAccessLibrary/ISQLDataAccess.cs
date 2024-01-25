@@ -6,7 +6,9 @@ namespace DataAccessLibrary
         string ConnectionStringName { get; set; }
 
         Task<List<T>> LoadData<T, U>(string sql, U parameters);
+        Task<List<T>> LoadData<T>(string storedProc, object parameters);
         Task SaveData<T>(string sql, T parameters);
-        Task SaveData(string storedProc, string connectionName, object parameters);
+        Task SaveData(string storedProc, object parameters);
+        Task<T> SaveDataReturn<T>(string storedProc, object parameters);
     }
 }

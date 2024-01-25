@@ -47,14 +47,40 @@ namespace DataAccessLibrary
             }
         }
 
-        public async Task SaveData(string storedProc, string connectionName, object parameters)
+        public async Task<T> SaveDataReturn<T>(string storedProc, object parameters)
         {
             string connectionString = _config.GetConnectionString(ConnectionStringName)
-                ?? throw new Exception("Missing connection string at " + connectionName);
+                ?? throw new Exception("Missing connection string at " + ConnectionStringName);
+
+            using var connection = new SqlConnection(connectionString);
+
+            var data = await connection.QuerySingleAsync<T>(storedProc, parameters, commandType: System.Data.CommandType.StoredProcedure);
+
+            return data;
+
+        }
+
+
+        public async Task SaveData(string storedProc, object parameters)
+        {
+            string connectionString = _config.GetConnectionString(ConnectionStringName)
+                ?? throw new Exception("Missing connection string at " + ConnectionStringName);
 
             using var connection = new SqlConnection(connectionString);
 
             await connection.ExecuteAsync(storedProc, parameters, commandType: System.Data.CommandType.StoredProcedure);
+        }
+
+        public async Task<List<T>> LoadData<T>(string storedProc, object parameters)
+        {
+            string connectionString = _config.GetConnectionString(ConnectionStringName)
+                ?? throw new Exception("Missing connection string at " + ConnectionStringName);
+
+            using var connection = new SqlConnection(connectionString);
+
+            var res = await connection.QueryAsync<T>(storedProc, parameters, commandType: System.Data.CommandType.StoredProcedure);
+
+            return res.ToList();
         }
 
     }

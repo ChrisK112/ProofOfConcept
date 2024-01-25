@@ -28,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="%25APPDATA%25\" />
     <Folder Include="Areas\Identity\Data\" />
     <Folder Include="Migrations\" />
   </ItemGroup>
