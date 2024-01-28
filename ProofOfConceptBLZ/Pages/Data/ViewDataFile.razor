@@ -85,8 +85,7 @@
         var userId = userM.Id;
         var companyId = userM.CompanyID;
         //verify user/company has access to the email
-        //if (!await UserAbleToAccessDataFile(userId, companyId))
-        if(1!=1)
+        if (!await UserAbleToAccessDataFile(userId, companyId))
         {
             _navigationManager.NavigateTo($"RedirectToLogin", false);
         }
