@@ -4,6 +4,8 @@ using DataAccessLibrary;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
+using Azure.Identity;
+using Microsoft.Extensions.Azure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,9 +15,15 @@ builder.Services.AddServerSideBlazor();
 builder.Services.AddSingleton<ProofOfConceptBLZ.Data.WeatherForecastService>();
 builder.Services.AddTransient<ISQLDataAccess, SQLDataAccess>();
 builder.Services.AddTransient<IPeopleData, PeopleData>();
+builder.Services.AddTransient<IKeyVaultAccess, KeyVaultAccess>();
+
 
 var cs = builder.Configuration.GetConnectionString("AZURE_SQL_CONNECTIONSTRING");
 builder.Services.AddDbContext<ProofOfConceptBLZ.Data.DataContext>(options => options.UseSqlServer(cs));
+
+var kv = builder.Configuration.GetConnectionString("AZURE_KEYVAULT");
+var keyVaultEndpoint = new Uri(kv);
+builder.Configuration.AddAzureKeyVault(keyVaultEndpoint, new DefaultAzureCredential());
 
 builder.Services.AddIdentity<ProofOfConceptBLZ.Data.ApplicationUser, IdentityRole>(options =>
 {

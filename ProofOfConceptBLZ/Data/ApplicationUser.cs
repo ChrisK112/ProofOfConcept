@@ -4,7 +4,7 @@ namespace ProofOfConceptBLZ.Data
 {
     public class ApplicationUser : IdentityUser
     {
-        public string CompanyID { get; set; }
+        public int CompanyID { get; set; }
     }
 }
 

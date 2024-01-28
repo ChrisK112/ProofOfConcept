@@ -1,0 +1,100 @@
+﻿@page "/Email/EmailManagment"
+@using ProofOfConceptBLZ.Data
+@using DataAccessLibrary
+@using Microsoft.AspNetCore.Identity;
+@using System.Security.Cryptography;
+
+@inject NavigationManager _navigationManager
+@inject ISQLDataAccess _db
+@inject AuthenticationStateProvider _authenticationStateProvider
+@inject UserManager<ApplicationUser> _userManager
+@inject IConfiguration _config
+
+<PageTitle>Email Managment</PageTitle>
+
+<h1>Email Managment</h1>
+<br />
+
+    
+
+<AuthorizeView>
+    <Authorized>
+
+        <button class="btn btn-primary mt-3" type="button" @onclick="@RedirectAddNewEmail">Add New Email</button>
+        <br /><br />
+
+        @if (emails == null)
+        {
+            <p><em>Loading email list...</em></p>
+        }
+        else if (emails == null && noEmails)
+        {
+            <p><em>No emails found</em></p>
+        }
+        else
+        {
+            <table class="table table-striped" id="ExistingEmailAccounts" style="max-width: min-content; white-space: nowrap; vertical-align: middle; text-align-last:center">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Name</th>
+                        <th>Email Address</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var email in emails)
+                    {
+                        <tr>
+                            <td width="1%" padding-right="1em"><button class="btn btn-info" type="button" @onclick=@(() => RedirectEditEmail(email.Id))>Edit</button></td>
+                            <td>@email.DisplayName</td>
+                            <td>@email.EmailAddress</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+    </Authorized>
+</AuthorizeView>
+
+
+@code {
+    //private Boolean addingNewEmail;
+    private List<EmailViewModel> emails;
+    private int UserCompanyId;
+
+    Boolean noEmails;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+        else
+        {
+            var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+            UserCompanyId = userM.CompanyID;
+            emails = await _db.LoadData<EmailViewModel>("spEmailAddress_Get", new { CompanyId = UserCompanyId });
+
+            if (emails == null || emails.Count == 0) noEmails = true;
+
+        }
+
+    }
+
+    private void RedirectAddNewEmail(MouseEventArgs args)
+    {
+        _navigationManager.NavigateTo("/Email/EmailManagment/AddEmail", true);
+    }
+
+    private void RedirectEditEmail(int id)
+    {
+        _navigationManager.NavigateTo("/Email/EmailManagment/EditEmail/" + id.ToString(), true);
+    }
+
+}
+
+

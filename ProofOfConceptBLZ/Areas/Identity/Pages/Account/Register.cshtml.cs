@@ -5,6 +5,10 @@ using System.ComponentModel;
 using Microsoft.AspNetCore.Identity;
 using ProofOfConceptBLZ.Data;
 using Microsoft.Identity.Client;
+using DataAccessLibrary;
+using System.Data;
+using DataAccessLibrary.Models;
+using System.ComponentModel.Design;
 
 namespace ProofOfConceptBLZ.Areas.Identity.Pages.Account
 {
@@ -14,15 +18,18 @@ namespace ProofOfConceptBLZ.Areas.Identity.Pages.Account
         private readonly SignInManager<ProofOfConceptBLZ.Data.ApplicationUser> _signInManager;
         private readonly UserManager<ProofOfConceptBLZ.Data.ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly ISQLDataAccess _db;
 
         public RegisterModel(SignInManager<ProofOfConceptBLZ.Data.ApplicationUser> signInManager,
                            UserManager<ProofOfConceptBLZ.Data.ApplicationUser> userManager,
-                           RoleManager<IdentityRole> roleManager 
+                           RoleManager<IdentityRole> roleManager,
+                           ISQLDataAccess db
                            ) 
         {
             _signInManager = signInManager;
             _userManager = userManager;
             _roleManager = roleManager;
+            _db = db;
         }
 
         [BindProperty]
@@ -40,13 +47,25 @@ namespace ProofOfConceptBLZ.Areas.Identity.Pages.Account
             ReturnUrl = Url.Content("~/");
             if(ModelState.IsValid)
             {
-                var identity = new ProofOfConceptBLZ.Data.ApplicationUser { UserName = Input.Email, Email = Input.Email, CompanyID = Input.CompanyID };
-                var result = await _userManager.CreateAsync(identity, Input.Password);
+                //create company, get ID
+                int companyId = await CreateCompany(Input.CompanyName);
+                var identity = new ProofOfConceptBLZ.Data.ApplicationUser { UserName = Input.AdminEmail, Email = Input.AdminEmail, CompanyID = companyId };
+                var result = await _userManager.CreateAsync(identity, Input.AdminPassword);
+                if(!result.Succeeded) 
+                { 
+                    
+                }
+                //Role admin
+                string adminRole = "Company Administrator";
+                var roleResult = IdentityResult.Success;
+                
+                if(!await _roleManager.RoleExistsAsync(adminRole))
+                {
+                    var role = new IdentityRole(adminRole);
+                    roleResult = await _roleManager.CreateAsync(role);
+                }
 
-                var role = new IdentityRole(Input.Role);
-                var roleResult = await _roleManager.CreateAsync(role);
-
-                var addUserRoleResult = await _userManager.AddToRoleAsync(identity, Input.Role);
+                var addUserRoleResult = await _userManager.AddToRoleAsync(identity, adminRole);
 
                 if(result.Succeeded && roleResult.Succeeded && addUserRoleResult.Succeeded)
                 {
@@ -60,21 +79,38 @@ namespace ProofOfConceptBLZ.Areas.Identity.Pages.Account
 
         }
 
+        private async Task<int> CreateCompany(string name)
+        {
+            int companyId = await _db.SaveDataReturn<int>("dbo.spCompany_Insert", CreateCompanyModel(name));
+            return companyId;
+        }
+
         public class InputModel
         {
             [Required(ErrorMessage = "Email is required.")]
             [EmailAddress]
-            public string Email { get; set; }
+            public string AdminEmail { get; set; }
 
             [Required(ErrorMessage = "Password is required.")]
+            [MinLength(8)]
+            [RegularExpression("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^\\da-zA-Z]).{8,15}$")]
             [DataType(DataType.Password)]
-            public string Password { get; set; }
+            public string AdminPassword { get; set; }
 
             [Required(ErrorMessage = "Company is required.")]
-            public string CompanyID { get; set; }
+            public string CompanyName { get; set; }
+        }
 
-            [Required(ErrorMessage = "Role is required.")]
-            public string Role { get; set; }
+        private CompanyModel CreateCompanyModel(string name)
+        {
+            CompanyModel m = new();
+
+            m.CompanyName = name;
+            m.IsDeleted = false;
+            m.HasActivePlan = true;
+            m.CreatedDateTime = DateTime.Now;
+
+            return m;
         }
 
     }

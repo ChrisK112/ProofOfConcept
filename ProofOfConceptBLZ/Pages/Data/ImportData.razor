@@ -16,99 +16,104 @@
 
 <PageTitle>Import Data</PageTitle>
 
-<h3>Import Data</h3>
-<br />
-@if (!importCompleted)
-{
-    <EditForm Model="FileUploadModel" OnValidSubmit="@SubmitFileForm">
-        <div>
-            <label for="fileupload">Data File:</label>
-            <InputFile OnChange="@LoadFile" class="form-control" accept=".txt,.csv,.xlsx" />
-        </div>
-        <button class="btn btn-primary mt-3" type="submit" disabled="@isLoading">Upload</button>
-    </EditForm>
-    <br />
-    <br />
-}
-else
-{
-    <h4>Import completed successfuly.</h4>
-    <br />
-    <p>Datafile: @dataTableName</p>
-    <p>Email Column: @emailColumnName</p>
-    <br />
-    <button class="btn btn-primary mt-3" type="button" onclick="@RefreshPage">New Import</button>
-}
+<h1>Import Data</h1>
 
-@if (isFileLoaded && !importCompleted)
-{
-    <EditForm Model="DataUploadModel" OnValidSubmit="@SubmitDatabaseImport">
-        <DataAnnotationsValidator />
-        <div>
-            <label for="campaignDataName">Data Name:</label>
-            <InputText id="campaignDataName" class="form-control" @bind-Value="DataUploadModel.DataFileName" />
-        </div>
-        <div>
-            <label for="emailDataColumn">Select the column containing emails:</label>
-            <InputSelect id="emailDataColumn" class="form-select" @bind-Value=DataUploadModel.EmailColumnName disabled="@isLoading">
-                <option>Select...</option>
-                @foreach (string columnName in dataColumnNames)
-                {
-                    <option value="@columnName">@columnName</option>
-                }
-            </InputSelect>
-        </div>
-        <button class="btn btn-primary mt-3" type="submit" disabled="@isLoading">Confirm Selection</button>
-    </EditForm>
+<AuthorizeView>
+    <Authorized>
     <br />
-    <br />
+    @if (!importCompleted)
+    {
+            <EditForm Model="FileUploadModel" OnValidSubmit="@SubmitFileForm" Context="formContext">
+            <div>
+                <label for="fileupload">Data File:</label>
+                <InputFile OnChange="@LoadFile" class="form-control" accept=".txt,.csv,.xlsx" />
+            </div>
+            <button class="btn btn-primary mt-3" type="submit" disabled="@isLoading">Upload</button>
+        </EditForm>
+        <br />
+        <br />
+    }
+    else
+    {
+        <h4>Import completed successfuly.</h4>
+        <br />
+        <p>Datafile: @dataTableName</p>
+        <p>Email Column: @emailColumnName</p>
+        <br />
+        <button class="btn btn-primary mt-3" type="button" onclick="@RefreshPage">New Import</button>
+    }
 
-
-    <table class="table table-striped">
-        <caption class="caption-top">Preview Data</caption>
-        <thead title="Sample data">
-            <tr>
-                @foreach (string columnName in dataColumnNames)
-                {
-                    <th scope="col">@columnName</th>
-                }
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (PreviewDataRow rowO in previewTable)
-            {
-                <tr @key=rowO>
-                    @foreach (string cell in rowO.row)
+    @if (isFileLoaded && !importCompleted)
+    {
+            <EditForm Model="DataUploadModel" OnValidSubmit="@SubmitDatabaseImport" Context="formContext">
+            <DataAnnotationsValidator />
+            <div>
+                <label for="campaignDataName">Data Name:</label>
+                <InputText id="campaignDataName" class="form-control" @bind-Value="DataUploadModel.DataFileName" />
+            </div>
+            <div>
+                <label for="emailDataColumn">Select the column containing emails:</label>
+                <InputSelect id="emailDataColumn" class="form-select" @bind-Value=DataUploadModel.EmailColumnName disabled="@isLoading">
+                    <option>Select...</option>
+                    @foreach (string columnName in dataColumnNames)
                     {
-                        <td>@cell</td>
+                        <option value="@columnName">@columnName</option>
+                    }
+                </InputSelect>
+            </div>
+            <button class="btn btn-primary mt-3" type="submit" disabled="@isLoading">Confirm Selection</button>
+        </EditForm>
+        <br />
+        <br />
+
+
+        <table class="table table-striped">
+            <caption class="caption-top">Preview Data</caption>
+            <thead title="Sample data">
+                <tr>
+                    @foreach (string columnName in dataColumnNames)
+                    {
+                        <th scope="col">@columnName</th>
                     }
                 </tr>
+            </thead>
+            <tbody>
+                @foreach (PreviewDataRow rowO in previewTable)
+                {
+                    <tr @key=rowO>
+                        @foreach (string cell in rowO.row)
+                        {
+                            <td>@cell</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+
+    @if (isLoading)
+    {
+        <br />
+        <div class="spinner"></div>
+    }
+
+
+    @if (errors.Count > 0)
+    {
+        <br />
+        <h2>Errors</h2>
+        <ul class="text-danger">
+            @foreach (string error in errors)
+            {
+                <li>@error</li>
             }
-        </tbody>
-    </table>
-}
 
+        </ul>
+    }
+    </Authorized>
+</AuthorizeView>
 
-@if (isLoading)
-{
-    <br />
-    <div class="spinner"></div>
-    <p> Uploading...</p>
-}
-
-
-@if (errors.Count > 0)
-{
-    <br />
-    <h2>Errors</h2>
-    <ul class="text-danger">
-        @foreach (string error in errors)
-        {
-            <li>@error</li>
-        }
-
-    </ul>
-}
 
 @code {
 
@@ -138,6 +143,17 @@ else
         }
     }
 
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+
+    }
+
     void RefreshPage()
     {
         _navigationManager.NavigateTo(_navigationManager.Uri, true);
@@ -153,10 +169,10 @@ else
         emailColumnName = DataUploadModel.EmailColumnName;
         string emailColumn = emailColumnName;
         string filePath = loadedFile;
-        
+
         dataTableName = DataUploadModel.DataFileName;
         string databaseDataFileName = dataTableName;
-        int companyId = Int32.Parse(await (getUserCompany()));
+        int companyId = await (getUserCompany());
         string username = await getUserName();
         DateTime time = DateTime.UtcNow;
 
@@ -174,7 +190,7 @@ else
 
         try
         {
-            ImportNewData(companyId, filePath, emailColumn, DataTableId);
+            await ImportNewData(companyId, filePath, emailColumn, DataTableId);
         }
         catch (Exception ex)
         {
@@ -182,12 +198,28 @@ else
             return;
         }
 
+        //update record count
+        try
+        {
+            await UpdateDataTableRecordCount(DataTableId);
+        }
+        catch (Exception ex)
+        {
+            errors.Add("File: " + file.Name + " Error while checking data: " + ex.Message);
+            return;
+        }
 
         //show completed
         isLoading = false;
         isFileLoaded = false;
         importCompleted = true;
 
+    }
+
+    //update record count
+    private async Task UpdateDataTableRecordCount(int DataTableId)
+    {
+        await _db.SaveData("dbo.spDataTable_UpdateRecordCount", new { DataTableId = DataTableId });
     }
 
     //DataTable
@@ -197,7 +229,7 @@ else
     }
 
     //DataColumn, DataRow, DataCell
-    private async void ImportNewData(int companyId, string filePath, string emailColumn, int DataTableId)
+    private async Task ImportNewData(int companyId, string filePath, string emailColumn, int DataTableId)
     {
         string extension = Path.GetExtension(filePath);
 
@@ -284,10 +316,10 @@ else
 
         try
         {
-            string company = await getUserCompany();
+            int company = await getUserCompany();
             string trustedFileName = Path.ChangeExtension(Path.GetRandomFileName(), Path.GetExtension(file.Name));
             string configPath = _config.GetValue<string>("FileStorage");
-            string authPath = company;
+            string authPath = company.ToString();
             string path = Path.Combine(configPath, authPath, trustedFileName);
 
             Directory.CreateDirectory(Path.Combine(configPath, authPath));
@@ -389,7 +421,7 @@ else
     }
 
 
-    private async Task<string> getUserCompany()
+    private async Task<int> getUserCompany()
     {
         try
         {
@@ -408,7 +440,7 @@ else
             throw;
         }
 
-        return "";
+        return 0;
 
     }
 

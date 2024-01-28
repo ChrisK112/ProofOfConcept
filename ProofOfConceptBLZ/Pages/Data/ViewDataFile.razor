@@ -1,0 +1,155 @@
+﻿@page "/Data/ViewDataFile/"
+@page "/Data/ViewDataFile/{dataviewid:int}" 
+@using ProofOfConceptBLZ.Data
+@using DataAccessLibrary
+@using Microsoft.AspNetCore.Identity;
+@using ProofOfConceptBLZ.Models;
+
+@inject NavigationManager _navigationManager;
+@inject ISQLDataAccess _db;
+@inject AuthenticationStateProvider _authenticationStateProvider;
+@inject UserManager<ApplicationUser> _userManager;
+@inject IConfiguration _config;
+
+
+<PageTitle>View Data</PageTitle>
+
+<h1>Browse Data</h1>
+
+<AuthorizeView>
+    <Authorized>
+        <br /><br />
+
+        @if (datarows == null || !dataReady)
+        {
+            <p><em>Loading Data...</em></p>
+        }
+        else if (datarows == null && noDataFiles)
+        {
+            <p><em>Data Load Error!</em></p>
+        }
+        else
+        {
+            <table class="table table-striped" id="ExistingEmailAccounts" style="max-width: min-content; white-space: nowrap; vertical-align: middle; text-align-last:center">
+                <thead>
+                    <tr>
+                        @foreach (var column in datacolumns)
+                        {
+                            <th>@column.ColumnHeader</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var datarow in datarows)
+                    {
+                        <tr>
+                            @foreach (string cell in datarow.DataCellValues)
+                            {
+                            <td>@cell.ToString()</td> 
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+    </Authorized>
+</AuthorizeView>
+
+
+
+
+@code {
+    [Parameter]
+    public int DataViewId { get; set; }
+
+    private List<DataCellViewModel> datacells;
+
+    private List<DataRowViewModel> datarows;
+
+    private List<DataColumnViewModel> datacolumns;
+
+    private Boolean noDataFiles;
+    private Boolean dataReady;
+
+    protected override async Task OnInitializedAsync()
+    {
+        dataReady = false;
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+        var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+        var userId = userM.Id;
+        var companyId = userM.CompanyID;
+        //verify user/company has access to the email
+        //if (!await UserAbleToAccessDataFile(userId, companyId))
+        if(1!=1)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+
+        //fill table
+
+        //get columns
+        datacolumns = await _db.LoadData<DataColumnViewModel>("spDataColumn_Get", new { DataTableId = DataViewId });
+
+        //get datacells
+        datacells = await _db.LoadData<DataCellViewModel>("spDataCell_Get", new { DataTableId = DataViewId });
+
+        //fill datarows with cells
+        FillRows(datacells);
+
+        dataReady = true;
+
+    }
+
+    private async Task<Boolean> UserAbleToAccessDataFile(string userId, int companyId)
+    {
+        Boolean ?ableToAccess = false;
+        try
+        {
+            ableToAccess = await _db.LoadDataSingle<Boolean>("spDataTable_ConfirmAccess", new
+            {
+                UserId = userId,
+                CompanyId = companyId,
+                DataTableId = DataViewId
+            });
+        }
+        catch (Exception e)
+        {
+            throw (e);
+        }
+
+        if (ableToAccess == null || ableToAccess == false) return false;
+
+        return true;
+    }
+
+    private void FillRows(List<DataCellViewModel> cells)
+    {
+        datarows = new();
+        int currentRow = 0;
+        List<string> rList = new();
+        foreach (DataCellViewModel cell in cells)
+        {
+            int cellRowIndex = cell.DataRowIndex;
+            string cellValue = cell.DataCellValue;
+
+            if (currentRow != cellRowIndex)
+            {
+                datarows.Add(new DataRowViewModel { DataRowIndex = currentRow, DataCellValues = new List<string>(rList) });
+                currentRow++;
+                rList.Clear();
+            }
+
+            rList.Add(cellValue);
+
+        }
+        datarows.Add(new DataRowViewModel { DataRowIndex = currentRow, DataCellValues = new List<string>(rList) }); // last row
+
+    }
+}
+

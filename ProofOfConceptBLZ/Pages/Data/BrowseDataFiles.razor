@@ -1,0 +1,97 @@
+﻿@page "/Data/BrowseData"
+@using ProofOfConceptBLZ.Data
+@using DataAccessLibrary
+@using Microsoft.AspNetCore.Identity;
+@using ProofOfConceptBLZ.Models;
+
+@inject NavigationManager _navigationManager;
+@inject ISQLDataAccess _db;
+@inject AuthenticationStateProvider _authenticationStateProvider;
+@inject UserManager<ApplicationUser> _userManager;
+@inject IConfiguration _config;
+
+
+<PageTitle>Browse Data</PageTitle>
+
+<h1>Browse Data</h1>
+
+<AuthorizeView>
+    <Authorized>
+
+        <button class="btn btn-primary mt-3" type="button" @onclick="@RedirectAddNewDataFile">Import New Datafile</button>
+        <br /><br />
+
+        @if (datatables == null)
+        {
+            <p><em>Loading data list...</em></p>
+        }
+        else if (datatables == null && noDataFiles)
+        {
+            <p><em>No emails found</em></p>
+        }
+        else
+        {
+            <table class="table table-striped" id="ExistingEmailAccounts" style="max-width: min-content; white-space: nowrap; vertical-align: middle; text-align-last:center">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Name</th>
+                        <th>Number Of Records</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var datatable in datatables)
+                    {
+                        <tr>
+                            <td width="1%" padding-right="1em"><button class="btn btn-info" type="button" @onclick=@(() => RedirectViewDataFile(datatable.DataTableId))>View Records</button></td>
+                            <td>@datatable.DataTableName</td>
+                            <td>@datatable.NumberOfRecords</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+    </Authorized>
+</AuthorizeView>
+
+
+
+
+@code {
+    private List<DataFileBrowseModel> datatables;
+
+    private Boolean noDataFiles;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+        else
+        {
+            var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+            int companyId = userM.CompanyID;
+            datatables = await _db.LoadData<DataFileBrowseModel>("spDataTable_ViewGet", new { CompanyId = companyId });
+
+            if (datatables == null || datatables.Count == 0) noDataFiles = true;
+
+        }
+
+    }
+
+    private void RedirectAddNewDataFile(MouseEventArgs args)
+    {
+        _navigationManager.NavigateTo("/Data/ImportData", true);
+    }
+
+    private void RedirectViewDataFile(int dataviewid)
+    {
+        _navigationManager.NavigateTo("/Data/ViewDataFile/" + dataviewid.ToString(), true);
+    }
+
+
+}

@@ -1,0 +1,176 @@
+﻿@page "/Email/EmailManagment/EditEmail"
+@page "/Email/EmailManagment/EditEmail/{emaileditid:int}"
+@using ProofOfConceptBLZ.Data
+@using DataAccessLibrary
+@using Microsoft.AspNetCore.Identity
+@using ProofOfConceptBLZ.Models
+@using System.Security.Cryptography
+
+@inject NavigationManager _navigationManager;
+@inject ISQLDataAccess _db;
+@inject AuthenticationStateProvider _authenticationStateProvider;
+@inject UserManager<ApplicationUser> _userManager;
+@inject IKeyVaultAccess _kv;
+
+<PageTitle>Edit Email</PageTitle>
+
+<h1>Edit Email</h1>
+
+ 
+<AuthorizeView>
+    <Authorized>
+
+        <EditForm Model="@editEmail" OnValidSubmit="@EditEmailTask" Context="formContext" >
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <div>
+                <label for="EmailAddress">Email Address:</label>
+                <InputText id="EmailAddress" class="form-control" @bind-Value="editEmail.EmailAddress" @ref="_emailForm" />
+            </div>
+            <div>
+                <label for="Password">Password:</label>
+                <InputText id="Password" class="form-control" type=password @bind-Value="editEmail.EmailPassword" />
+            </div>
+            <div>
+                <label for="DisplayName">Display Name:</label>
+                <InputText id="DisplayName" class="form-control" @bind-Value="editEmail.DisplayName" @ref="_nameForm" />
+            </div>
+            <div>
+                <label for="Host">Host:</label>
+                <InputText id="Host" class="form-control" @bind-Value="editEmail.Host" @ref="_hostForm" />
+            </div>
+            <div>
+                <label for="Port">Port:</label>
+                <InputNumber id="Port" class="form-control" @bind-Value="editEmail.Port" @ref="_portForm" />
+            </div>
+
+            <button class="btn btn-primary mt-3" type="submit">Submit</button>
+        </EditForm>
+
+        @if (isLoading)
+        {
+            <br />
+            <div class="spinner"></div>
+        }
+    </Authorized>
+</AuthorizeView>
+
+
+@code {
+    [Parameter]
+    public int EmailEditId { get; set; }
+
+    private EmailEditModel editEmail = new EmailEditModel();
+    private InputText _emailForm { get; set; }
+    private InputText _nameForm { get; set; }
+    private InputText _hostForm { get; set; }
+    private InputNumber<int> _portForm { get; set; }
+
+    Boolean isLoading;
+    Boolean noEmails;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+        var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+        var userId = userM.Id;
+        var companyId = userM.CompanyID;
+        //verify user/company has access to the email
+        if (! await UserAbleToAccessEmail(userId, companyId)){
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+
+        //fill in textfields
+        FillTextFields();
+
+    }
+
+    private async Task<Boolean> UserAbleToAccessEmail(string userId, int companyId)
+    {
+        //run select, if null then cannot access
+        try
+        {
+            editEmail = await _db.LoadDataSingle<EmailEditModel>("spEmailAddress_GetForEdit", new
+            {
+                UserId = userId,
+                CompanyId = companyId,
+                EmailId = EmailEditId
+            });
+        }
+        catch(Exception e)
+        {
+            throw (e);
+        }
+
+        if (editEmail == null || editEmail.Id == 0) return false;
+
+        return true;
+    }
+
+    private void FillTextFields()
+    {
+        _emailForm.Value = editEmail.EmailAddress;
+        _nameForm.Value = editEmail.DisplayName;
+        _hostForm.Value = editEmail.Host;
+        _portForm.Value = editEmail.Port;
+    }
+
+    private async Task EditEmailTask()
+    {
+        isLoading = true;
+
+        try
+        {
+            string emailPass = TryEncrypt(editEmail.EmailPassword);
+
+            EmailEditModel emailEditModel = new EmailEditModel
+                {
+                    Id = EmailEditId,
+                    DisplayName = editEmail.DisplayName,
+                    EmailAddress = editEmail.EmailAddress,
+                    Host = editEmail.Host,
+                    Port = editEmail.Port,
+                    EmailPassword = emailPass
+                };
+
+            await _db.SaveData("spEmailAddress_Update", emailEditModel);
+        }
+        catch (Exception e)
+        {
+            isLoading = false;
+            throw (e);
+        }
+
+        isLoading = false;
+        _navigationManager.NavigateTo("/Email/EmailManagment", true);
+
+
+    }
+
+    private string TryEncrypt(string pass)
+    {
+        if (null == pass) return "";
+        if (pass.Equals("")) return "";
+
+        return _kv.Encrypt(pass);
+    }
+
+    private EmailEditModel CreateEmailEditModel(int index, int DataTableId, int CompanyId, string dataColumnName, Boolean isEmail)
+    {
+        EmailEditModel m = new();
+
+        // m.DataColumnIndex = index;
+        // m.DataTableId = DataTableId;
+        // m.CompanyId = CompanyId;
+        // m.ColumnHeader = dataColumnName;
+        // m.IsEmailColumn = isEmail;
+
+        return m;
+    }
+
+}

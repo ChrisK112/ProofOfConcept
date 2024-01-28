@@ -27,8 +27,6 @@ namespace DataAccessLibrary
             string connectionString = _config.GetConnectionString(ConnectionStringName);
             SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(connectionString);
 
-            builder.InitialCatalog = "test";
-
             using (IDbConnection connection = new SqlConnection(connectionString))
             {
                 var data = await connection.QueryAsync<T>(sql, parameters);
@@ -81,6 +79,18 @@ namespace DataAccessLibrary
             var res = await connection.QueryAsync<T>(storedProc, parameters, commandType: System.Data.CommandType.StoredProcedure);
 
             return res.ToList();
+        }
+
+        public async Task<T> LoadDataSingle<T>(string storedProc, object parameters)
+        {
+            string connectionString = _config.GetConnectionString(ConnectionStringName)
+                ?? throw new Exception("Missing connection string at " + ConnectionStringName);
+
+            using var connection = new SqlConnection(connectionString);
+
+            var res = await connection.QuerySingleAsync<T>(storedProc, parameters, commandType: System.Data.CommandType.StoredProcedure);
+
+            return res;
         }
 
     }
