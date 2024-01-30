@@ -40,15 +40,14 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var datarow in datarows)
-                    {
+                    <Virtualize Items = "@datarows" Context="datarowsContext" OverscanCount="30">
                         <tr>
-                            @foreach (string cell in datarow.DataCellValues)
+                            @foreach (var cellData in datarowsContext.DataCellValues)
                             {
-                            <td>@cell.ToString()</td> 
+                                <td>@cellData</td>
                             }
                         </tr>
-                    }
+                    </Virtualize>
                 </tbody>
             </table>
         }
