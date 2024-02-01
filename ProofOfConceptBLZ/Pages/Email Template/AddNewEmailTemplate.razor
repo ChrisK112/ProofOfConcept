@@ -1,49 +1,33 @@
-﻿@page "/Email/EmailManagment/AddEmail"
+﻿@page "/Email/EmailTemplate/AddEmailTemplate"
 @using ProofOfConceptBLZ.Data
 @using DataAccessLibrary
 @using Microsoft.AspNetCore.Identity
 @using ProofOfConceptBLZ.Models
 @using System.Security.Cryptography
+@using System.Text
 
+@inject IConfiguration _config
 @inject NavigationManager _navigationManager;
 @inject ISQLDataAccess _db;
 @inject AuthenticationStateProvider _authenticationStateProvider;
 @inject UserManager<ApplicationUser> _userManager
-@inject IKeyVaultAccess _kv
 
-<PageTitle>Email Managment</PageTitle>
+<PageTitle>Add New Email Template</PageTitle>
 
-<h1>Add New Email</h1>
+<h1>Add New Email Template</h1>
 
  
 <AuthorizeView>
     <Authorized>
 
-        <EditForm Model="@newEmail" OnValidSubmit="@AddEmail" Context="formContext">
+        <EditForm Model="@newEmailTemplate" OnValidSubmit="@AddEmailTemplate" Context="formContext">
             <DataAnnotationsValidator />
             <ValidationSummary />
             <div>
-                <label for="EmailAddress">Email Address:</label>
-                <InputText id="EmailAddress" class="form-control" @bind-Value="newEmail.EmailAddress" />
+                <label for="EmailTemplateName">Email Template Name:</label>
+                <InputText id="EmailTemplateName" class="form-control" @bind-Value="newEmailTemplate.EmailTemplateName" />
             </div>
-            <div>
-                <label for="Password">Password:</label>
-                <InputText id="Password" class="form-control" type=password @bind-Value="newEmail.EmailPassword" />
-            </div>
-            <div>
-                <label for="DisplayName">Display Name:</label>
-                <InputText id="DisplayName" class="form-control" @bind-Value="newEmail.DisplayName" />
-            </div>
-            <div>
-                <label for="Host">Host:</label>
-                <InputText id="Host" class="form-control" @bind-Value="newEmail.Host" />
-            </div>
-            <div>
-                <label for="Port">Port:</label>
-                <InputNumber id="Port" class="form-control" @bind-Value="newEmail.Port" />
-            </div>
-
-            <button class="btn btn-primary mt-3" type="submit">Submit</button>
+            <button class="btn btn-primary mt-3" type="submit">Create</button>
         </EditForm>
 
         @if (isLoading)
@@ -56,10 +40,9 @@
 
 
 @code {
-    private NewEmailModel newEmail = new NewEmailModel();
+    private NewEmailTemplateModel newEmailTemplate = new NewEmailTemplateModel();
 
     Boolean isLoading;
-    Boolean noEmails;
 
     protected override async Task OnInitializedAsync()
     {
@@ -72,7 +55,7 @@
 
     }
 
-    private async Task AddEmail()
+    private async Task AddEmailTemplate()
     {
         isLoading = true;
         int companyId = 0;
@@ -86,30 +69,28 @@
 
             if (companyId == 0 || userId == "") throw(new Exception("Problem contacting the authentication server!"));
 
-            NewEmailModel emailAdd = new NewEmailModel
+            NewEmailTemplateModel emailTemplateAdd = new NewEmailTemplateModel
                 {
                     CompanyId = companyId,
                     AddedUserId = userId,
                     AddedDateTime = DateTime.UtcNow,
-                    EmailAddress = newEmail.EmailAddress,
-                    DisplayName = newEmail.DisplayName,
-                    EmailPassword = _kv.Encrypt(newEmail.EmailPassword),
-                    Host = newEmail.Host,
-                    Port = newEmail.Port,
+                    EmailTemplateName = newEmailTemplate.EmailTemplateName,
                     IsDeleted = false
                 };
 
-            await _db.SaveData("spEmailAddress_Insert", emailAdd);
+            int emailTemplateId = await _db.SaveDataReturn<int>("spEmailTemplate_Insert", emailTemplateAdd);
+
+            string emailStoragePath = _config.GetValue<string>("EmailStorge");
+            string emailTemplateFilepath = await CreateNewHTMLTemplate(emailStoragePath, companyId, emailTemplateId);
+            await _db.SaveData("spEmailTemplateLocation_Update", new { Id = emailTemplateId, EmailTemplateLocation = emailTemplateFilepath });
+
+            RedirectEditEmailTemplate(emailTemplateId);
         }
         catch (Exception e)
         {
             isLoading = false;
             throw (e);
         }
-
-        isLoading = false;
-        _navigationManager.NavigateTo("/Email/EmailManagment", true);
-
 
     }
 
@@ -143,6 +124,28 @@
             return userM.Id;
 
         }
+    }
+
+    private void RedirectEditEmailTemplate(int id)
+    {
+        _navigationManager.NavigateTo("/Email/EmailTemplate/EditEmailTemplate/" + id.ToString(), true);
+    }
+
+    private async Task<string> CreateNewHTMLTemplate(string folderPath, int companyId, int emailTemplateId)
+    {
+        string filepath = Path.Combine(folderPath, companyId.ToString());
+        Directory.CreateDirectory(filepath);
+        filepath = Path.Combine(filepath, emailTemplateId.ToString() + ".html");
+
+        using (FileStream fs = new FileStream(filepath, FileMode.Create))
+        {
+            using (StreamWriter w = new StreamWriter(fs, Encoding.UTF8))
+            {
+                w.WriteLine("<p>Edit your email template...</p>");
+            }
+        }
+
+        return filepath;
     }
 
 }

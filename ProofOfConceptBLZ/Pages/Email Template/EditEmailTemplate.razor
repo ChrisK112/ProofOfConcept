@@ -1,0 +1,102 @@
+﻿@page "/Email/EmailTemplate/EditEmailTemplate"
+@page "/Email/EmailTemplate/EditEmailTemplate/{emailtemplateid:int}"
+@using ProofOfConceptBLZ.Data
+@using DataAccessLibrary
+@using Microsoft.AspNetCore.Identity
+@using ProofOfConceptBLZ.Models
+@using System.Security.Cryptography
+
+
+@inject NavigationManager _navigationManager;
+@inject ISQLDataAccess _db;
+@inject AuthenticationStateProvider _authenticationStateProvider;
+@inject UserManager<ApplicationUser> _userManager;
+@inject IKeyVaultAccess _kv;
+
+<PageTitle>Edit Email Template</PageTitle>
+
+<h1>Edit Email Template</h1>
+
+ 
+<AuthorizeView>
+    <Authorized>
+        
+        @if (isLoading)
+        {
+            <br />
+            <div class="spinner"></div>
+        }
+    </Authorized>
+</AuthorizeView>
+
+
+@code {
+    [Parameter]
+    public int EmailTemplateId { get; set; }
+
+
+    public string htmlContents { get; set; }
+    public string filePath { get; set; }
+
+    Boolean isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+        var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+        var userId = userM.Id;
+        var companyId = userM.CompanyID;
+        //verify user/company has access to the email
+        if (!await UserAbleToAccessEmailTemplate(userId, companyId))
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+
+        //fill in textfields
+        GetCurrentHTML();
+
+
+    }
+
+    private async Task<Boolean> UserAbleToAccessEmailTemplate(string userId, int companyId)
+    {
+        //run select, if null then cannot access
+        try
+        {
+            filePath = await _db.LoadDataSingle<string>("spEmailTemplate_GetForEdit", new
+            {
+                UserId = userId,
+                CompanyId = companyId,
+                EmailTemplateId = EmailTemplateId
+            });
+        }
+        catch(Exception e)
+        {
+            throw (e);
+        }
+
+        if (filePath == null || filePath.Equals("")) return false;
+
+        return true;
+    }
+
+    private void GetCurrentHTML()
+    {
+        htmlContents = "test123";
+    }
+
+
+    private void SubmitHTML()
+    {
+        isLoading = true;
+
+        isLoading = false;
+        return;
+    }
+
+}

@@ -1,0 +1,98 @@
+﻿@page "/Email/EmailTemplateManagment"
+@using ProofOfConceptBLZ.Data
+@using DataAccessLibrary
+@using Microsoft.AspNetCore.Identity;
+@using System.Security.Cryptography;
+
+@inject NavigationManager _navigationManager
+@inject ISQLDataAccess _db
+@inject AuthenticationStateProvider _authenticationStateProvider
+@inject UserManager<ApplicationUser> _userManager
+@inject IConfiguration _config
+
+<PageTitle>Email Template Managment</PageTitle>
+
+<h1>Email Template Managment</h1>
+<br />
+
+    
+
+<AuthorizeView>
+    <Authorized>
+
+        <button class="btn btn-primary mt-3" type="button" @onclick="@RedirectAddNewEmailTemplate">Add New Email</button>
+        <br /><br />
+
+        @if (emailTemplates == null)
+        {
+            <p><em>Loading email list...</em></p>
+        }
+        else if (emailTemplates == null && noEmailTemplates)
+        {
+            <p><em>No emails found</em></p>
+        }
+        else
+        {
+            <table class="table table-striped" id="ExistingEmailAccounts" style="max-width: min-content; white-space: nowrap; vertical-align: middle; text-align-last:center">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Template Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var template in emailTemplates)
+                    {
+                        <tr>
+                            <td width="1%" padding-right="1em"><button class="btn btn-info" type="button" @onclick=@(() => RedirectEditEmailTemplate(template.Id))>Edit</button></td>
+                            <td>@template.EmailTemplateName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+    </Authorized>
+</AuthorizeView>
+
+
+@code {
+    //private Boolean addingNewEmail;
+    private List<EmailTemplateViewModel> emailTemplates;
+    private int UserCompanyId;
+
+    Boolean noEmailTemplates;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+        else
+        {
+            var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+            UserCompanyId = userM.CompanyID;
+            emailTemplates = await _db.LoadData<EmailTemplateViewModel>("spEmailTemplate_Get", new { CompanyId = UserCompanyId });
+
+            if (emailTemplates == null || emailTemplates.Count == 0) noEmailTemplates = true;
+
+        }
+
+    }
+
+    private void RedirectAddNewEmailTemplate(MouseEventArgs args)
+    {
+        _navigationManager.NavigateTo("/Email/EmailTemplate/AddEmailTemplate", true);
+    }
+
+    private void RedirectEditEmailTemplate(int id)
+    {
+        _navigationManager.NavigateTo("/Email/EmailTemplate/EditEmailTemplate/" + id.ToString(), true);
+    }
+
+}
+
+

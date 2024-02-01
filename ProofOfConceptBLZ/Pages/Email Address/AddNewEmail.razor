@@ -1,0 +1,148 @@
+﻿@page "/Email/EmailManagment/AddEmail"
+@using ProofOfConceptBLZ.Data
+@using DataAccessLibrary
+@using Microsoft.AspNetCore.Identity
+@using ProofOfConceptBLZ.Models
+@using System.Security.Cryptography
+
+@inject NavigationManager _navigationManager;
+@inject ISQLDataAccess _db;
+@inject AuthenticationStateProvider _authenticationStateProvider;
+@inject UserManager<ApplicationUser> _userManager
+@inject IKeyVaultAccess _kv
+
+<PageTitle>Add New Email</PageTitle>
+
+<h1>Add New Email</h1>
+
+ 
+<AuthorizeView>
+    <Authorized>
+
+        <EditForm Model="@newEmail" OnValidSubmit="@AddEmail" Context="formContext">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <div>
+                <label for="EmailAddress">Email Address:</label>
+                <InputText id="EmailAddress" class="form-control" @bind-Value="newEmail.EmailAddress" />
+            </div>
+            <div>
+                <label for="Password">Password:</label>
+                <InputText id="Password" class="form-control" type=password @bind-Value="newEmail.EmailPassword" />
+            </div>
+            <div>
+                <label for="DisplayName">Display Name:</label>
+                <InputText id="DisplayName" class="form-control" @bind-Value="newEmail.DisplayName" />
+            </div>
+            <div>
+                <label for="Host">Host:</label>
+                <InputText id="Host" class="form-control" @bind-Value="newEmail.Host" />
+            </div>
+            <div>
+                <label for="Port">Port:</label>
+                <InputNumber id="Port" class="form-control" @bind-Value="newEmail.Port" />
+            </div>
+
+            <button class="btn btn-primary mt-3" type="submit">Submit</button>
+        </EditForm>
+
+        @if (isLoading)
+        {
+            <br />
+            <div class="spinner"></div>
+        }
+    </Authorized>
+</AuthorizeView>
+
+
+@code {
+    private NewEmailModel newEmail = new NewEmailModel();
+
+    Boolean isLoading;
+    Boolean noEmails;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+        }
+
+    }
+
+    private async Task AddEmail()
+    {
+        isLoading = true;
+        int companyId = 0;
+        string userId = "";
+
+        try
+        {
+            var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            companyId = await GetUserCompanyId(authState);
+            userId = await GetUserId(authState);
+
+            if (companyId == 0 || userId == "") throw(new Exception("Problem contacting the authentication server!"));
+
+            NewEmailModel emailAdd = new NewEmailModel
+                {
+                    CompanyId = companyId,
+                    AddedUserId = userId,
+                    AddedDateTime = DateTime.UtcNow,
+                    EmailAddress = newEmail.EmailAddress,
+                    DisplayName = newEmail.DisplayName,
+                    EmailPassword = _kv.Encrypt(newEmail.EmailPassword),
+                    Host = newEmail.Host,
+                    Port = newEmail.Port,
+                    IsDeleted = false
+                };
+
+            await _db.SaveData("spEmailAddress_Insert", emailAdd);
+        }
+        catch (Exception e)
+        {
+            isLoading = false;
+            throw (e);
+        }
+
+        isLoading = false;
+        _navigationManager.NavigateTo("/Email/EmailManagment", true);
+
+
+    }
+
+    private async Task<int> GetUserCompanyId(AuthenticationState authState)
+    {
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+            return 0;
+        }
+        else
+        {
+            var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+            return userM.CompanyID;
+
+        }
+    }
+
+    private async Task<string> GetUserId(AuthenticationState authState)
+    {
+        var user = authState.User;
+        if (user == null || !user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo($"RedirectToLogin", false);
+            return "";
+        }
+        else
+        {
+            var userM = await _userManager.FindByNameAsync(user.Identity.Name);
+            return userM.Id;
+
+        }
+    }
+
+}
