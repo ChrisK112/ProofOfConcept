@@ -1,11 +1,14 @@
 ﻿@page "/Email/EmailTemplate/EditEmailTemplate"
 @page "/Email/EmailTemplate/EditEmailTemplate/{emailtemplateid:int}"
+
 @using ProofOfConceptBLZ.Data
 @using DataAccessLibrary
 @using Microsoft.AspNetCore.Identity
 @using ProofOfConceptBLZ.Models
 @using System.Security.Cryptography
 
+@using TinyMCE.Blazor
+@inject IWebHostEnvironment Env
 
 @inject NavigationManager _navigationManager;
 @inject ISQLDataAccess _db;
@@ -16,7 +19,6 @@
 <PageTitle>Edit Email Template</PageTitle>
 
 <h1>Edit Email Template</h1>
-
  
 <AuthorizeView>
     <Authorized>
@@ -26,6 +28,24 @@
             <br />
             <div class="spinner"></div>
         }
+        else
+        {
+            <EditForm Model="@emailTemplateModel" Context="formContext" >
+                <Editor 
+                    ScriptSrc="@mcePath" 
+                    Conf="@editorConf"
+                    Field="() => emailTemplateModel.HTMLContent"
+                        @bind-Value="emailTemplateModel.HTMLContent" />
+                
+                <button class="btn btn-primary mt-3" type="button" disabled="@isLoading">Preview</button>
+                <br /> <br />
+                <button class="btn btn-primary mt-3" type="submit" disabled="@isLoading">Save Template</button>
+            </EditForm>
+            
+            
+            
+        }
+
     </Authorized>
 </AuthorizeView>
 
@@ -34,11 +54,24 @@
     [Parameter]
     public int EmailTemplateId { get; set; }
 
+    private string mcePath = "/lib/tinymce/tinymce.min.js";
+
+    private EmailTemplateEditModel emailTemplateModel = new EmailTemplateEditModel();
 
     public string htmlContents { get; set; }
     public string filePath { get; set; }
 
     Boolean isLoading;
+
+    private Dictionary<string, object> editorConf = new Dictionary<string, object>{
+    {"promotion", false},
+    {"width", "auto"},
+    {"menubar", "file edit insert format table"},
+    {"toolbar", "undo redo | fontfamily fontsize | bold italic underline | numlist bullist | alignnone aligncenter alignleft alignright alignjustify | link | quickimage"},
+    {"plugins", "link autolink quickbars image lists quickbars preview save table"},
+    {"quickbars_insert_toolbar", "false"},
+    {"removed_menuitems", "newdocument"}    
+  };
 
     protected override async Task OnInitializedAsync()
     {
